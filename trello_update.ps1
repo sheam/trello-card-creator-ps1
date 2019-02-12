@@ -1,17 +1,56 @@
-param([string]$InputFile)
-
-$API_KEY = 'f20469d0a4dd5cdd39af63294652bf9a'
-$TOKEN = '7a401a9356d62270ef0ec6e54ff0244dc41c20780cdee270e68db6c78dc09437'
-$BOARD_ID = 'vxgj7axH'
+param([string]$InputFile, [string]$ConfigFile, [string]$ApiKey, [string]$Token, [string]$BoardId, [string]$ListName)
 
 function Log([string]$msg)
 {
     Write-Host $msg
 }
 
+function GetRequiredSetting([string]$name, [string]$option, [string]$env, [string]$config)
+{
+    $result = IsNull $option $env $config
+    if( -not $result )
+    {
+        Log "Error: $name is a required option."
+        exit 1
+    }
+    return $result
+}
+
+function IsNull
+{
+    for($i=0;$i -lt $args.count;$i++)
+    {
+        if($args[$i])
+        {
+            return $args[$i]
+        }
+    }
+}
+
+function LoadConfig()
+{
+    $Script:config_file = GetRequiredSetting -name 'ConfigFile' -option $ConfigFile -env $Env:TRELLO_CONFIG_FILE -config 'config.json'
+
+    if( Test-Path $Script:config_file )
+    {
+        Log "Using config file '$($Script:config_file)'"
+        $json = Get-Content $Script:config_file | Out-String | ConvertFrom-Json
+    }
+    else 
+    {
+        $json = @()
+    }
+
+    $Script:config_inputFile = GetRequiredSetting -name 'InputFile' -option $InputFile -env $Env:TRELLO_INPUT_FILE -config $json.input_file
+    $Script:config_token = GetRequiredSetting -name 'Token' -option $Token -env $Env:TRELLO_TOKEN -config $json.token
+    $Script:config_key = GetRequiredSetting -name 'ApiKey' -option $ApiKey -env $Env:TRELLO_API_KEY -config $json.key
+    $Script:config_boardId = GetRequiredSetting -name 'BoardId' -option $BoardId -env $Env:TRELLO_BOARD_ID -config $json.board_id
+    $Script:config_listName = GetRequiredSetting -name 'ListName' -option $ListName -env $Env:TRELLO_LIST_NAME -config $json.list_name
+}
+
 function GetInputCards()
 {
-    $file = $InputFile
+    $file = $Script:config_inputFile
 
     if( -not $file )
     {
@@ -69,7 +108,7 @@ function TrelloUrl([string]$path)
     }
 
 
-    return "$root$path&key=$API_KEY&token=$TOKEN"
+    return "$root$path&key=$($Script:config_key)&token=$($Script:config_token)"
 }
 
 function GetList([string]$boardId, [string] $listName)
@@ -77,7 +116,7 @@ function GetList([string]$boardId, [string] $listName)
     Log "Getting lists"
     $url = TrelloUrl("/boards/$boardId/lists?cards=none&card_fields=all&filter=open&fields=all")
     $result = Invoke-RestMethod -Method 'GET' $url -UseBasicParsing
-    $list = $result | where { $_.name -eq $listName }
+    $list = $result | Where-Object { $_.name -eq $listName }
     if( -not $list )
     {
         Log "ERROR: could not find the '$listName' on board with id '$boardId'"
@@ -107,6 +146,7 @@ function CreateCard([string]$listId, [string]$title, [string]$desc)
     }
     $url = TrelloUrl($path)
     $result = Invoke-RestMethod -Method 'POST' $url -UseBasicParsing
+    return $result
 }
 
 function CreateCards([string]$listId, $cardList)
@@ -122,7 +162,8 @@ function CreateCards([string]$listId, $cardList)
     }
 }
 
-$todoList = GetList -boardId $BOARD_ID -listName 'TODO'
+LoadConfig
+$todoList = GetList -boardId $Script:config_boardId -listName $Script:config_listName
 $cardsToAdd = GetInputCards
 CreateCards -listId $todoList.id -cardList $cardsToAdd
 
