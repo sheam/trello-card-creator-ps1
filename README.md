@@ -13,7 +13,8 @@ Bulk create trello cards can be configured through the command line, config file
 
 The input file is a text file with one card title per file. 
 If you would like descriptions, you can add a bar followed by your desction.
-```Card One Title
+```
+Card One Title
 Card Two Title|Card two has a description
 Card 3333
 ```
